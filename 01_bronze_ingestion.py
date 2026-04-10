@@ -1,14 +1,14 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # SafeCity 360 — Bronze Ingestion
-# MAGIC **Layer:** Bronze (Raw)
-# MAGIC **Purpose:** Read raw crime CSVs from S3, add metadata, write as Delta.
+# MAGIC **Reads:** Public S3 via spark.read | **Writes:** Managed Delta (Unity Catalog)
 
 # COMMAND ----------
 
-S3_LANDING_PATH   = "s3://your-safecity360-bucket/safecity360/landing/"
-S3_REFERENCE_PATH = "s3://your-safecity360-bucket/safecity360/reference/"
-BRONZE_PATH       = "s3://your-safecity360-bucket/safecity360/bronze/"
+S3_RAW_PATH       = "s3://your-safecity360-bucket/safecity360/raw/"        # TODO
+S3_REFERENCE_PATH = "s3://your-safecity360-bucket/safecity360/reference/"  # TODO
+CATALOG = "main"
+SCHEMA_BRONZE = "safecity_bronze"
 
 dbutils.widgets.text("batch_num", "01")
 batch_num = dbutils.widgets.get("batch_num")
@@ -18,33 +18,23 @@ from pyspark.sql.types import *
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## Step 1: Read Raw Crime Data
-
-# COMMAND ----------
-
-crime_schema = StructType([
-    StructField("CASE_NUMBER", StringType(), True),
-    StructField("DATE", StringType(), True),
-    StructField("IUCR_CODE", StringType(), True),
-    StructField("DISTRICT", IntegerType(), True),
-    StructField("BEAT", IntegerType(), True),
-    StructField("BLOCK", StringType(), True),
-    StructField("LOCATION_TYPE", StringType(), True),
-    StructField("ARREST", StringType(), True),
-    StructField("DOMESTIC", StringType(), True),
-    StructField("LATITUDE", StringType(), True),
-    StructField("LONGITUDE", StringType(), True),
-    StructField("YEAR", IntegerType(), True),
-])
-
-# TODO: Read batch CSV
-# df_raw = spark.read.csv(f"{S3_LANDING_PATH}batch_{batch_num}/", header=True, schema=crime_schema)
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{SCHEMA_BRONZE}")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 2: Add Bronze Metadata
+# MAGIC ## Step 1: Read Raw Data from S3
+
+# COMMAND ----------
+
+# TODO: Define schema and read CSV
+# df_raw = spark.read.csv(f"{S3_RAW_PATH}batch_{batch_num}/", header=True, inferSchema=True)
+# print(f"Raw rows: {df_raw.count()}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Step 2: Add Bronze Metadata + Write
 
 # COMMAND ----------
 
@@ -53,46 +43,33 @@ crime_schema = StructType([
 #     .withColumn("_bronze_load_timestamp", F.current_timestamp()) \
 #     .withColumn("_bronze_batch_num", F.lit(batch_num)) \
 #     .withColumn("_bronze_source_file", F.input_file_name())
+# df_bronze.write.format("delta").mode("append").option("mergeSchema","true") \
+#     .saveAsTable(f"{CATALOG}.{SCHEMA_BRONZE}.crimes")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 3: Write to Bronze Delta
+# MAGIC ## Step 3: Reference Data (Batch 1 only)
 
 # COMMAND ----------
 
-# TODO:
-# df_bronze.write.format("delta").mode("append").option("mergeSchema","true").save(f"{BRONZE_PATH}crimes/")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Step 4: Reference Data (Batch 1 only)
-
-# COMMAND ----------
-
-# TODO: Load reference CSVs (run once during Batch 1)
+# TODO: Run once
 # if batch_num == "01":
-#     for ref in ["districts", "iucr_codes", "location_types", "district_name_changes"]:
-#         df = spark.read.csv(f"{S3_REFERENCE_PATH}{ref}.csv", header=True, inferSchema=True)
-#         df.write.format("delta").mode("overwrite").save(f"{BRONZE_PATH}{ref}/")
-#         print(f"Loaded {ref}: {df.count()} rows")
+#     spark.read.csv(f"{S3_REFERENCE_PATH}districts.csv", header=True, inferSchema=True) \
+#         .write.format("delta").mode("overwrite").saveAsTable(f"{CATALOG}.{SCHEMA_BRONZE}.districts")
+#     spark.read.csv(f"{S3_REFERENCE_PATH}iucr_codes.csv", header=True, inferSchema=True) \
+#         .write.format("delta").mode("overwrite").saveAsTable(f"{CATALOG}.{SCHEMA_BRONZE}.iucr_codes")
+#     spark.read.csv(f"{S3_REFERENCE_PATH}location_types.csv", header=True, inferSchema=True) \
+#         .write.format("delta").mode("overwrite").saveAsTable(f"{CATALOG}.{SCHEMA_BRONZE}.location_types")
+#     spark.read.csv(f"{S3_REFERENCE_PATH}district_name_changes.csv", header=True, inferSchema=True) \
+#         .write.format("delta").mode("overwrite").saveAsTable(f"{CATALOG}.{SCHEMA_BRONZE}.district_name_changes")
+#     print("Reference data loaded.")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 5: Verify
+# MAGIC ## Step 4: Verify
 
 # COMMAND ----------
 
-# TODO: Print row count and sample
-# df_v = spark.read.format("delta").load(f"{BRONZE_PATH}crimes/")
-# print(f"Total Bronze crimes: {df_v.count()}")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Screenshot Checklist
-# MAGIC - [ ] Bronze row count after each batch
-# MAGIC - [ ] Sample rows with _bronze_* metadata
-# MAGIC - [ ] Reference tables loaded (districts, iucr_codes, location_types)
+# TODO: Print row counts for all tables
